@@ -18,9 +18,9 @@ import {Base64} from "lib/base64/base64.sol";
 contract PuppyRaffle is ERC721, Ownable {
     using Address for address payable;
 
-    uint256 public immutable entranceFee;
+    uint256 public immutable entranceFee; // @audit-info i_entranceFee
 
-    address[] public players;
+    address[] public players; // @audit-info s_players also for below
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -30,7 +30,7 @@ contract PuppyRaffle is ERC721, Ownable {
     uint64 public totalFees = 0;
 
     // mappings to keep track of token traits
-    mapping(uint256 => uint256) public tokenIdToRarity;
+    mapping(uint256 => uint256) public tokenIdToRarity; // @audit-into namedMappings
     mapping(uint256 => string) public rarityToUri;
     mapping(uint256 => string) public rarityToName;
 

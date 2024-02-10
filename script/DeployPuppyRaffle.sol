@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.7.6;
 
-import {Script} from "forge-std/Script.sol";
+import {Script} from "../lib/forge-std/src/Script.sol";
 import {PuppyRaffle} from "../src/PuppyRaffle.sol";
 
 contract DeployPuppyRaffle is Script {
@@ -13,10 +13,6 @@ contract DeployPuppyRaffle is Script {
         feeAddress = msg.sender;
 
         vm.broadcast();
-        PuppyRaffle puppyRaffle = new PuppyRaffle(
-            1e18,
-            feeAddress,
-            duration
-        );
+        new PuppyRaffle(1e18, feeAddress, duration);
     }
 }
