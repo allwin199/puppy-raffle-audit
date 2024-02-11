@@ -21,6 +21,7 @@ contract PuppyRaffle is ERC721, Ownable {
     uint256 public immutable entranceFee; // @audit-info i_entranceFee
 
     address[] public players; // @audit-info s_players also for below
+    // q since we have to pay one of the player, players should be marked as payable?
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
     address public previousWinner;
@@ -83,6 +84,8 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         // Check for duplicates
+        // q should duplicate checking happen before pushing players?
+        // q should players.length kept in memory and read from it?
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
@@ -98,6 +101,7 @@ contract PuppyRaffle is ERC721, Ownable {
         require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
         require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
 
+        // @audit-bug refund should be made to playerAddress not msg.sender
         payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
@@ -108,6 +112,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param player the address of a player in the raffle
     /// @return the index of the player in the array, if they are not active, it returns 0
     function getActivePlayerIndex(address player) external view returns (uint256) {
+        // q should players.length kept in memory and read from it?
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == player) {
                 return i;
@@ -133,7 +138,7 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 fee = (totalAmountCollected * 20) / 100;
         totalFees = totalFees + uint64(fee);
 
-        uint256 tokenId = totalSupply();
+        uint256 tokenId = totalSupply(); // q where is totalSupply?
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
@@ -146,6 +151,8 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         delete players;
+        // @audit-bug since the players is deleted instead of re-setting
+        // after the first raffle draw raffle will be broken
         raffleStartTime = block.timestamp;
         previousWinner = winner;
         (bool success,) = winner.call{value: prizePool}("");
@@ -155,6 +162,10 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
+        // @audit-bug if owner didn't withdraw for every raffle.
+        // Then fee will be stuck
+        // first time the below logic will work
+        // after second draw totalFees will be twice the amount of address(this).balance;
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
@@ -171,6 +182,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this function will return true if the msg.sender is an active player
     function _isActivePlayer() internal view returns (bool) {
+        // q should players.length kept in memory and read from it?
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == msg.sender) {
                 return true;
