@@ -81,6 +81,7 @@ contract PuppyRaffle is ERC721, Ownable {
         // q what if newPlayers length is 0?
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
         for (uint256 i = 0; i < newPlayers.length; i++) {
+            // q where is players[] getting reset?
             players.push(newPlayers[i]);
         }
 
