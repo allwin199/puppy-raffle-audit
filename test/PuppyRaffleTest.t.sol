@@ -3,7 +3,7 @@ pragma solidity ^0.7.6;
 pragma experimental ABIEncoderV2;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PuppyRaffle} from "../src/PuppyRaffle.sol";
+import {PuppyRaffle} from "../src/PuppyRaffleOriginal.sol";
 
 contract PuppyRaffleTest is Test {
     PuppyRaffle puppyRaffle;
@@ -44,6 +44,43 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.enterRaffle{value: entranceFee * 2}(players);
         assertEq(puppyRaffle.players(0), playerOne);
         assertEq(puppyRaffle.players(1), playerTwo);
+    }
+
+    function test_denialOfService() public {
+        vm.txGasPrice(1);
+
+        // let's enter 100 players
+        uint256 playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+
+        uint256 gasStartFirst = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+        uint256 gasEndFirst = gasleft();
+        uint256 gasUsedFirst = (gasStartFirst - gasEndFirst) * tx.gasprice;
+
+        console.log("Gas Cost for the first %s players ->", playersNum, gasUsedFirst);
+
+        // now for the 2nd 100 players
+        address[] memory playersTwo = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            playersTwo[i] = address(i + playersNum);
+        }
+
+        uint256 gasStartSecond = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(playersTwo);
+        uint256 gasEndSecond = gasleft();
+        uint256 gasUsedSecond = (gasStartSecond - gasEndSecond) * tx.gasprice;
+
+        console.log("Gas Cost for the second %s players ->", playersNum, gasUsedSecond);
+
+        assertLt(gasUsedFirst, gasUsedSecond);
+
+        // Logs:
+        //     Gas Cost for the first 100 players -> 6252039
+        //     Gas Cost for the second 100 players -> 18068130
     }
 
     function testCantEnterWithoutPayingMultiple() public {
