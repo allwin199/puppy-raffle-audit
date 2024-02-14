@@ -46,6 +46,7 @@ Lead Security Researches:
   - [Low](#low)
   - [Gas](#gas)
     - [\[G-1\] Unchanged state variable should be declared constant or immutable.](#g-1-unchanged-state-variable-should-be-declared-constant-or-immutable)
+    - [\[G-2\] Storage variables in a loop should be cached.](#g-2-storage-variables-in-a-loop-should-be-cached)
   - [Informational](#informational)
     - [\[I-1\] Solidity pragma should be specific, not wide](#i-1-solidity-pragma-should-be-specific-not-wide)
     - [\[I-2\] Using an outdated version of solidity is not recommended.](#i-2-using-an-outdated-version-of-solidity-is-not-recommended)
@@ -119,6 +120,21 @@ Instances:
 
 Reading from storage is much more expensive than reading from a constant or immutable variable.
 
+### [G-2] Storage variables in a loop should be cached.
+
+Everytime you call `players.length` you read from storage, as opposed from memory which is more gas efficient.
+
+```diff
++   uint256 playersLength = players.length;
+-   for (uint256 i = 0; i < players.length - 1; i++) {
++   for (uint256 i = 0; i < playersLength - 1; i++) {
+-       for (uint256 j = i + 1; j < players.length; j++) {
++       for (uint256 j = i + 1; j < playersLength; j++) {
+            require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+        }
+    }
+```
+
 ## Informational
 
 ### [I-1] Solidity pragma should be specific, not wide
@@ -147,3 +163,4 @@ Assigning values to address state variables without checking for `address(0)`.
 
 Instances:
 `PuppyRaffle::feeAddress`
+
