@@ -20,4 +20,12 @@
 - q does `raffleStartTime` gets updated after each raffle draw?
 - q does `raffleDuration` is set correctly?
 
+- In line there is a potential overflow
+- type(uint64).max = 18446744073709551615
+- If 100 players entered the raffle by paying 1ETH each.
+- Total value will be 100 ether
+- owner will 20% cut which is 20 ether
+- Storing 20 ether in uint64 max will cause overflow.
+-
+- Write POC for it.
 - 

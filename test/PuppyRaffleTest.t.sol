@@ -3,7 +3,7 @@ pragma solidity ^0.7.6;
 pragma experimental ABIEncoderV2;
 
 import {Test, console} from "forge-std/Test.sol";
-import {PuppyRaffle} from "../src/PuppyRaffleOriginal.sol";
+import {PuppyRaffle} from "../src/PuppyRaffle.sol";
 
 contract PuppyRaffleTest is Test {
     PuppyRaffle puppyRaffle;
@@ -284,6 +284,29 @@ contract PuppyRaffleTest is Test {
 
         assertEq(endingAttackContractBalance, startingAttackContractBalance + 5 ether, "attackerContractBalance");
         assertEq(raffleBalanceAfterAttack, 0);
+    }
+
+    function test_Overflow() public {
+        uint256 playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+
+        // simulate raffle duration is over
+        vm.warp(4 days);
+        vm.roll(block.number + 1);
+
+        // // let's call select winner
+        puppyRaffle.selectWinner();
+
+        uint256 actualFee = ((players.length * entranceFee) * 20) / 100;
+        console.log("Total Calc", actualFee); // 20000000000000000000
+
+        uint256 precisionLostFee = puppyRaffle.totalFees();
+        console.log("Total Fees", precisionLostFee); // 1553255926290448384
     }
 }
 

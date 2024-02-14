@@ -70,7 +70,7 @@ Place the following test into `PuppyRaffleTest.t.sol`
 
 **Recommended Mitigation:** There are a few recommendations.
 
-1. Consider allwing duplicates. Users can make new wallet addresses anyways, so a duplicate check dosen't prevent the same person from entering multiple times, only the same wallet address.
+1. Consider allowing duplicates. Users can make new wallet addresses anyways, so a duplicate check dosen't prevent the same person from entering multiple times, only the same wallet address.
 
 2. Consider using a mapping to check for duplicates. This would allow constant time lookup of whether a user has already entered.
 
@@ -86,6 +86,8 @@ Place the following test into `PuppyRaffleTest.t.sol`
     function enterRaffle(address[] memory newPlayers) public payable {
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
         for (uint256 i = 0; i < newPlayers.length; i++) {
++           // Check for duplicates only from the new players
++           require(s_addressToRaffleId[i] != raffleId, "PuppyRaffle: Duplicate player");
             players.push(newPlayers[i]);
             addressToRaffleId[newPlayers[i]] = raffleId;
         }
@@ -96,10 +98,6 @@ Place the following test into `PuppyRaffleTest.t.sol`
 -               require(players[i] != players[j], "PuppyRaffle: Duplicate player");
 -           }
 -       }
-+       // Check for duplicates only from the new players
-+       for (uint256 i = 0; i < players.length; i++) { 
-+            require(s_addressToRaffleId[i] != raffleId, "PuppyRaffle: Duplicate player");
-+       }
     }
 
     function selectWinner() external {
@@ -111,7 +109,7 @@ Place the following test into `PuppyRaffleTest.t.sol`
 
 ---
 
-### [H-#] Re-Entrancy in `PuppyRaffle::refund`
+### [H-#] `PuppyRaffle::refund` is vulnerable to Re-entrancy attack, potentially resulting in the loss of funds.
 
 **Description:** `PuppyRaffle::refund` is sending the `entranceFee` back to the user. However, the issue arises because the user's balance is updated after sending the ETH, leading to Re-entrancy vulnerability.
 
@@ -210,6 +208,8 @@ Place the following test into `PuppyRaffleTest.t.sol`
 
 **Recommended Mitigation:** 
 
+There are few mitigations:
+
 1. Follow CEI(Checks, Effects, Interactions).
    - Modifying storage variables falls under Effects.
    - Sending ETH to other contracts falls under Interactions.
@@ -235,4 +235,89 @@ Place the following test into `PuppyRaffleTest.t.sol`
     }
 ```
 
+</details>
+
+---
+
+### [H-#] The `PuppyRaffle::selectWinner` function sets aside 20% of `totalAmountCollected` for later withdrawal by the owner. However, as `totalFees` is stored as a uint64, there is a risk of potential integer overflow.
+
+**Description:** `type(uint64).max` value is `18446744073709551615`, Let's say 100 players entered the raffle therfore total fees will be 100 ether. 20% of 100 ether will be  `20000000000000000000`. This number is bigger than `type(uint64).max` which can cause potential overflow.
+
+```js
+    function selectWinner() external {
+        .
+        .
+        .
+        uint256 totalAmountCollected = players.length * entranceFee;
+        uint256 prizePool = (totalAmountCollected * 80) / 100;
+        uint256 fee = (totalAmountCollected * 20) / 100;
+
+@>      totalFees = totalFees + uint64(fee);
+
+    }
+
+```
+
+**Impact:** As more players enter, `totalFees` will get bigger and 20% of `totalFees` cannot be stored in `fee` which is `uint64` which can cause potential Integer Overflow.
+
+**Proof of Concept:**
+
+<details>
+<summary>Poc</summary>
+
+```js
+    function test_Overflow() public {
+        uint256 playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+
+        // simulate raffle duration is over
+        vm.warp(4 days);
+        vm.roll(block.number + 1);
+
+        // // let's call select winner
+        puppyRaffle.selectWinner();
+
+        uint256 actualFee = ((players.length * entranceFee) * 20) / 100;
+        console.log("Actual Fee", actualFee); // 20000000000000000000
+
+        uint256 precisionLostFee = puppyRaffle.totalFees();
+        console.log("Precison Lost Fee", precisionLostFee); // 1553255926290448384
+    }
+
+    - 20% of 100 ether is 20 ether
+    - since typecasting to `uint64`, `totalFees` is displaying some random number. 
+```
+
+
+</details>
+
+**Recommended Mitigation:**
+
+Consider avoiding type casting from bigger to smaller.
+eg: `uint256` to `uint64`
+
+<details>
+<summary>Mitigation</summary>
+
+```diff
+-   uint64 public totalFees = 0;
++   uint256 public totalFees = 0;
+
+    function selectWinner() external {
+        .
+        .
+        .
+        uint256 totalAmountCollected = players.length * entranceFee;
+        uint256 prizePool = (totalAmountCollected * 80) / 100;
+        uint256 fee = (totalAmountCollected * 20) / 100;
+        
+-        totalFees = totalFees + uint64(fee);
++        totalFees = totalFees + fee;
+    }
+```
 </details>
