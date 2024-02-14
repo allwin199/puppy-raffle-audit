@@ -77,7 +77,6 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
-        // q what if newPlayers length is 0?
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
         for (uint256 i = 0; i < newPlayers.length; i++) {
             players.push(newPlayers[i]);
@@ -90,7 +89,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
             }
         }
-        // q if it's an empty array, we still emit an event?
+        // @followup/audit if it's an empty array, we still emit an event?
         emit RaffleEnter(newPlayers);
     }
 
@@ -117,8 +116,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
-        // q what if the player is at index 0?
-        // audit if the player is at index 0, it'll return 0 and a player might think they are not active!
+        // @audit if the player is at index 0, it'll return 0 and a player might think they are not active!
         return 0;
     }
 
@@ -129,20 +127,19 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
-        // q does this follow CEI? No
+        // @audit-info recommend to follow CEI
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
         // @audit randomness
         // fixes: Chainlink VRF, Commit Reveal Scheme
 
-        // q if our transaction picks a winner and we don't like it... revert?
-        // q gas war.... // @followup
+        // @audit people can revert the TX till they win
         uint256 winnerIndex =
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
 
-        // q why not just do address(this).balance?
+        // @audit-info why not just do address(this).balance?
         uint256 totalAmountCollected = players.length * entranceFee;
 
         // @audit check for arithmetic errors
@@ -154,7 +151,6 @@ contract PuppyRaffle is ERC721, Ownable {
         totalFees = totalFees + uint64(fee);
 
         // e when we mint a new puppy NFT, we use the totalSupply as the tokenId
-        // q where do we increment the tokenId/totalSupply?
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
@@ -176,7 +172,6 @@ contract PuppyRaffle is ERC721, Ownable {
         // e vanity, dosen't matter much
         previousWinner = winner;
 
-        // q what if the winner is a smart contract with a fallback that will fail?
         // @audit the winner wouldn't get the money if their fallback was messed up!
         (bool success,) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
@@ -185,13 +180,12 @@ contract PuppyRaffle is ERC721, Ownable {
 
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
-        // q ok so, if the protocol has players someone can't withdraw fees?
+        // @audit is it difficult to withdraw fees if there are players (MEV)
         // @audit mishandling ETH
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
 
-        // q what if the fee Address is a smart contract with a fallback that will fail?
         (bool success,) = feeAddress.call{value: feesToWithdraw}("");
         require(success, "PuppyRaffle: Failed to withdraw fees");
     }

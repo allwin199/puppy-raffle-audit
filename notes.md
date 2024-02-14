@@ -52,3 +52,10 @@
 - `_isActivePlayer` is not used anywhere in the contract
 - Add this to findings as informational
 
+---
+
+- Unnecessary Emit in line `94`
+
+---
+
+- line `120`
