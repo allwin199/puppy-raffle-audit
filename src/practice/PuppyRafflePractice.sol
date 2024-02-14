@@ -153,8 +153,6 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         delete players;
-        // @audit-bug since the players is deleted instead of re-setting
-        // after the first raffle draw raffle will be broken
         raffleStartTime = block.timestamp;
         previousWinner = winner;
         (bool success,) = winner.call{value: prizePool}("");

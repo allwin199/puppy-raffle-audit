@@ -290,7 +290,9 @@ There are few mitigations:
     }
 
     - 20% of 100 ether is 20 ether
-    - since typecasting to `uint64`, `totalFees` is displaying some random number. 
+    - since typecasting to `uint64`, `totalFees` values is been truncated.
+    - (actualFee - type(uint64).max) result is displayed.
+    - Which is inaccurate for `totalFees`
 ```
 
 
@@ -315,7 +317,7 @@ eg: `uint256` to `uint64`
         uint256 totalAmountCollected = players.length * entranceFee;
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
-        
+
 -        totalFees = totalFees + uint64(fee);
 +        totalFees = totalFees + fee;
     }
