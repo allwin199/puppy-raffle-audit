@@ -323,3 +323,25 @@ eg: `uint256` to `uint64`
     }
 ```
 </details>
+
+---
+
+### [I-1] Solidity pragma should be specific, not wide
+
+Consider using a specific version of Solidity in your contracts instead of a wide version. For example, instead of `pragma solidity ^0.8.0;`, use `pragma solidity 0.8.0;`
+
+### [I-2] Using an outdated version of solidity is not recommended.
+
+**Description:** solc frequently releases new compiler versions. Using an old version prevents access to new Solidity security checks. We also recommend avoiding complex pragma statement.
+
+**Recommendation:** Deploy with any of the following Solidity versions:
+
+`0.8.18`
+The recommendations take into account:
+- Risks related to recent releases
+- Risks of complex code generation changes
+- Risks of new language features
+- Risks of known bugs
+- Use a simple pragma version that allows any of these versions. Consider using the latest version of Solidity for testing.
+
+Please see [Slither](https://github.com/crytic/slither/wiki/Detector-Documentation#incorrect-versions-of-solidity) documentation for more information.
