@@ -41,3 +41,14 @@
 
 - Check line `179`
 
+---
+
+- Mishandling of ETH line `193`
+- `address(this).balance` can be manipulated using `selfDestruct`
+- Write Poc
+
+---
+
+- `_isActivePlayer` is not used anywhere in the contract
+- Add this to findings as informational
+

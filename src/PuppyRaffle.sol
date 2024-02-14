@@ -77,11 +77,9 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice duplicate entrants are not allowed
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
-        // q were custom reverts a thing in 0.7.6 solidity?
         // q what if newPlayers length is 0?
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
         for (uint256 i = 0; i < newPlayers.length; i++) {
-            // q where is players[] getting reset?
             players.push(newPlayers[i]);
         }
 
@@ -92,6 +90,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
             }
         }
+        // q if it's an empty array, we still emit an event?
         emit RaffleEnter(newPlayers);
     }
 
@@ -130,8 +129,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
-        // q does this follow CEI?
-        // q are the duration & start time being set correctly?
+        // q does this follow CEI? No
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
@@ -146,8 +144,8 @@ contract PuppyRaffle is ERC721, Ownable {
 
         // q why not just do address(this).balance?
         uint256 totalAmountCollected = players.length * entranceFee;
-        // q is the 80% correct?
-        // check for arithmetic errors
+
+        // @audit check for arithmetic errors
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
 
@@ -178,7 +176,6 @@ contract PuppyRaffle is ERC721, Ownable {
         // e vanity, dosen't matter much
         previousWinner = winner;
 
-        // q can we reenter somewhere?
         // q what if the winner is a smart contract with a fallback that will fail?
         // @audit the winner wouldn't get the money if their fallback was messed up!
         (bool success,) = winner.call{value: prizePool}("");
@@ -189,6 +186,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
         // q ok so, if the protocol has players someone can't withdraw fees?
+        // @audit mishandling ETH
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
@@ -202,10 +200,13 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param newFeeAddress the new address to send fees to
     function changeFeeAddress(address newFeeAddress) external onlyOwner {
         feeAddress = newFeeAddress;
+
+        // @audit are we missing events?
         emit FeeAddressChanged(newFeeAddress);
     }
 
     /// @notice this function will return true if the msg.sender is an active player
+    // @audit this isn't used anywhere
     function _isActivePlayer() internal view returns (bool) {
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == msg.sender) {
