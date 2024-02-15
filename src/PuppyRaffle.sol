@@ -139,22 +139,22 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @dev we reset the active players array after the winner is selected
     /// @dev we send 80% of the funds to the winner, the other 20% goes to the feeAddress
     function selectWinner() external {
-        // @audit-info recommend to follow CEI
+        // written recommend to follow CEI
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
-        // @audit randomness
+        // written randomness
         // fixes: Chainlink VRF, Commit Reveal Scheme
 
-        // @audit people can revert the TX till they win
+        // written people can revert the TX till they win
         uint256 winnerIndex =
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
 
-        // @audit-info why not just do address(this).balance?
+        // report-skipped why not just do address(this).balance?
         uint256 totalAmountCollected = players.length * entranceFee;
 
-        // @audit-info Magic Numbers
+        // report-written Magic Numbers
         // @audit check for arithmetic errors
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;

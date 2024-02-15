@@ -43,7 +43,9 @@ Lead Security Researches:
 - [Findings](#findings)
 	- [High](#high)
 		- [\[H-1\] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain raffle balance.](#h-1-reentrancy-attack-in-puppyrafflerefund-allows-entrant-to-drain-raffle-balance)
+		- [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows users to influence or predict the winner and influence or predict the winner puppy.](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-users-to-influence-or-predict-the-winner-and-influence-or-predict-the-winner-puppy)
 	- [Medium](#medium)
+		- [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential denial of service(DOS) attack, incrementing gas costs for future entrants.](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-denial-of-servicedos-attack-incrementing-gas-costs-for-future-entrants)
 	- [Low](#low)
 		- [\[L-1\] `PuppyRaffle::getActivePlayerIndex` returns 0 for non-existent players and for players at index 0, causing a player at index 0 to incorrectly think they have not entered the raffle.](#l-1-puppyrafflegetactiveplayerindex-returns-0-for-non-existent-players-and-for-players-at-index-0-causing-a-player-at-index-0-to-incorrectly-think-they-have-not-entered-the-raffle)
 	- [Gas](#gas)
@@ -53,6 +55,8 @@ Lead Security Researches:
 		- [\[I-1\] Solidity pragma should be specific, not wide](#i-1-solidity-pragma-should-be-specific-not-wide)
 		- [\[I-2\] Using an outdated version of solidity is not recommended.](#i-2-using-an-outdated-version-of-solidity-is-not-recommended)
 		- [\[I-3\] Missing checks for `address(0)` when assigning values to address state variables](#i-3-missing-checks-for-address0-when-assigning-values-to-address-state-variables)
+		- [\[I-4\] `PuppyRaffle::selectWinner` does not follow CEI, which is not a best practice.](#i-4-puppyraffleselectwinner-does-not-follow-cei-which-is-not-a-best-practice)
+		- [\[I-5\] Use of "magic" numbers is discouraged](#i-5-use-of-magic-numbers-is-discouraged)
 
 # Protocol Summary
 
@@ -81,11 +85,10 @@ Commit Hash:
 ## Scope 
 
 ./src/
+PuppyRaffle.sol
 
 ## Roles
 
-- Owner: The user who can set the password and read the password.
-- Outsiders: No one else should be able to set or read the password.
 
 # Executive Summary
 
@@ -241,7 +244,131 @@ And this contract as well
 - Also, Reentrancy Guard from [Openzeppelin](https://docs.openzeppelin.com/contracts/4.x/api/security#ReentrancyGuard) can be used.
 
 
+### [H-2] Weak randomness in `PuppyRaffle::selectWinner` allows users to influence or predict the winner and influence or predict the winner puppy.
+
+**Description:** Hashing `msg.sender`, `block.timestamp`, and `block.difficulty` together creates a predictable final number. A predictable random number is not a good random number. Malicious users can manipulate these values or know them ahead of time to choose the winner of the raffle themselves.
+
+**Note:** This additional means users could front-run this function and call `refund` if they see they are not the winner.
+
+**Impact:** Any user can influence the winner of the raffle, winning the money and selecting the `rarest` puppy. Making the entire raffle worthless of it becomes a gas war as to who wins the raffles.
+
+**Proof of Concept:**
+
+1. Validators can know ahead of time the `block.timestamp` and 	`block.difficulty` and use that to predict when/how to participate. See the [solidity blog on prevrandao](https://soliditydeveloper.com/prevrandao). `block.difficulty` was recently replaced with prevrandao.
+2. User can mine/manipulate their `msg.sender` value to result in their address being used to generate the winner!
+3. Users can revert their `selectWinner` transaction if they don't like the winner of the resulting puppy.
+   
+Using on-chain values as a randomness seed is a [well-known attack vector](https://betterprogramming.pub/how-to-generate-truly-random-numbers-in-solidity-and-blockchain-9ced6472dbdf) in the blockchain space.
+
+**Recommended Mitigation:** Consider using an oracle for your randomness like [Chainlink VRF](https://docs.chain.link/vrf/v2/introduction).
+
 ## Medium
+
+### [M-1] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential denial of service(DOS) attack, incrementing gas costs for future entrants.
+
+**Description:** The `PuppyRaffle::enterRaffle` function loops through the `players` array to check for duplicates. However, the longer the `PuppyRaffle::players` array is, the more checks a new player will have to make. This means the gas costs for players who enter right when the raffle starts will be dramatically lower than those who enter later. Every additional address in the `players` array, is an additional check the loop will have to make.
+
+```js
+// @audit Dos Attack
+@>  for (uint256 i = 0; i < players.length - 1; i++) {
+        for (uint256 j = i + 1; j < players.length; j++) {
+            require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+        }
+    }
+```
+
+**Impact:** The gas cost for raffle entrants will greatly increase as more players enter the raffle. Discouraging later users from entering, and causing a rush at the start of a raffle to be one of the first entrants in the queue.
+
+An attacker might make the `PuppyRaffle::entrants` array so big, that no else enters, guaranteeing themselves the win.
+
+**Proof of Concept:**
+
+If we have 2 set of 100 players enter, the gas costs will be as such:
+- 1st 100 players: ~6252039 gas 
+- 2nd 100 players: ~18068130 gas
+
+This is more than 3x more expensive for the seconds 100 players.
+
+<details>
+<summary>Poc</summary>
+Place the following test into `PuppyRaffleTest.t.sol`
+
+```js
+    function test_denialOfService() public {
+        vm.txGasPrice(1);
+
+        // let's enter 100 players
+        uint256 playersNum = 100;
+        address[] memory players = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+
+        uint256 gasStartFirst = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+        uint256 gasEndFirst = gasleft();
+        uint256 gasUsedFirst = (gasStartFirst - gasEndFirst) * tx.gasprice;
+
+        console.log("Gas Cost for the first %s players ->", playersNum, gasUsedFirst);
+
+        // now for the 2nd 100 players
+        address[] memory playersTwo = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            playersTwo[i] = address(i + playersNum);
+        }
+
+        uint256 gasStartSecond = gasleft();
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(playersTwo);
+        uint256 gasEndSecond = gasleft();
+        uint256 gasUsedSecond = (gasStartSecond - gasEndSecond) * tx.gasprice;
+
+        console.log("Gas Cost for the second %s players ->", playersNum, gasUsedSecond);
+
+        assertLt(gasUsedFirst, gasUsedSecond);
+
+        // Logs:
+        //     Gas Cost for the first 100 players -> 6252039
+        //     Gas Cost for the second 100 players -> 18068130
+    }
+```
+
+</details>
+
+**Recommended Mitigation:** There are a few recommendations.
+
+1. Consider allowing duplicates. Users can make new wallet addresses anyways, so a duplicate check dosen't prevent the same person from entering multiple times, only the same wallet address.
+
+2. Consider using a mapping to check for duplicates. This would allow constant time lookup of whether a user has already entered.
+
+
+```diff
++   mapping(address => uint256) public s_addressToRaffleId;
++   uint256 public raffleId = 0;
+.
+.
+.
+    function enterRaffle(address[] memory newPlayers) public payable {
+        require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
+        for (uint256 i = 0; i < newPlayers.length; i++) {
++           // Check for duplicates only from the new players
++           require(s_addressToRaffleId[i] != raffleId, "PuppyRaffle: Duplicate player");
+            players.push(newPlayers[i]);
+            addressToRaffleId[newPlayers[i]] = raffleId;
+        }
+
+-       // check for duplicates
+-       for (uint256 i = 0; i < players.length - 1; i++) {
+-            for (uint256 j = i + 1; j < players.length; j++) {
+-               require(players[i] != players[j], "PuppyRaffle: Duplicate player");
+-           }
+-       }
+    }
+
+    function selectWinner() external {
++       raffleId = raffleId + 1;
+        require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
+    }
+```
 
 ## Low
 
@@ -329,3 +456,39 @@ Assigning values to address state variables without checking for `address(0)`.
 Instances:
 `PuppyRaffle::feeAddress`
 
+### [I-4] `PuppyRaffle::selectWinner` does not follow CEI, which is not a best practice.
+
+It's best to keep code clean and follow CEI (Checks, Effects, Interactions).
+
+```diff
+	function selectWinner() external {
+		.
+		.
+		.
+-		(bool success,) = winner.call{value: prizePool}("");
+-       require(success, "PuppyRaffle: Failed to send prize pool to winner");
+        _safeMint(winner, tokenId);
++		(bool success,) = winner.call{value: prizePool}("");
++       require(success, "PuppyRaffle: Failed to send prize pool to winner");
+	}
+
+```
+
+### [I-5] Use of "magic" numbers is discouraged
+
+It can be confusing to see number literals in a codebase, and it's much more readable if the number are given a name.
+
+Examples:
+
+```js
+	uint256 prizePool = (totalAmountCollected * 80) / 100;
+    uint256 fee = (totalAmountCollected * 20) / 100;
+```
+
+Instead, you could use:
+
+``` js
+	uint256 public constant PRIZE_POOL_PERCENTAGE = 80;
+	uint256 public constant FEE_PERCENTAGE = 20;
+	uint256 public constant POOL_PRECISION = 100;
+```
