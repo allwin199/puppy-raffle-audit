@@ -3,8 +3,8 @@ title: Protocol Audit Report
 author: Prince Allwin
 date: February 16, 2024
 header-includes:
-  - \usepackage{titling}
-  - \usepackage{graphicx}
+#   - \usepackage{titling}
+#   - \usepackage{graphicx}
 ---
 
 \begin{titlepage}
