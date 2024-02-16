@@ -1,7 +1,7 @@
 ---
 title: Protocol Audit Report
 author: Prince Allwin
-date: February 10, 2024
+date: February 16, 2024
 header-includes:
   - \usepackage{titling}
   - \usepackage{graphicx}
@@ -26,9 +26,9 @@ header-includes:
 
 <!-- Your report starts here! -->
 
-Prepared by: [Prince Allwin]()
+<!-- Prepared by: [Prince Allwin]()
 Lead Security Researches: 
-- Prince Allwin
+- Prince Allwin -->
 
 # Table of Contents
 - [Table of Contents](#table-of-contents)
@@ -43,8 +43,9 @@ Lead Security Researches:
 - [Findings](#findings)
   - [High](#high)
     - [\[H-1\] Reentrancy attack in `PuppyRaffle::refund` allows entrant to drain raffle balance.](#h-1-reentrancy-attack-in-puppyrafflerefund-allows-entrant-to-drain-raffle-balance)
-    - [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows users to influence or predict the winner and influence or predict the winner puppy.](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-users-to-influence-or-predict-the-winner-and-influence-or-predict-the-winner-puppy)
+    - [\[H-2\] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner.](#h-2-weak-randomness-in-puppyraffleselectwinner-allows-anyone-to-choose-winner)
     - [\[H-3\] Integer overflow of `PuppyRaffle::totalFees` loses fees](#h-3-integer-overflow-of-puppyraffletotalfees-loses-fees)
+    - [\[H-4\] Malicious winner can forever halt the raffle](#h-4-malicious-winner-can-forever-halt-the-raffle)
   - [Medium](#medium)
     - [\[M-1\] Looping through players array to check for duplicates in `PuppyRaffle::enterRaffle` is a potential denial of service(DOS) attack, incrementing gas costs for future entrants.](#m-1-looping-through-players-array-to-check-for-duplicates-in-puppyraffleenterraffle-is-a-potential-denial-of-servicedos-attack-incrementing-gas-costs-for-future-entrants)
     - [\[M-2\] Unsafe cast of `PuppyRaffle::fee` loses fees](#m-2-unsafe-cast-of-puppyrafflefee-loses-fees)
@@ -62,7 +63,7 @@ Lead Security Researches:
     - [\[I-5\] Use of "magic" numbers is discouraged](#i-5-use-of-magic-numbers-is-discouraged)
 
 # Protocol Summary
-
+Puppy Rafle is a protocol dedicated to raffling off puppy NFTs with variying rarities. A portion of entrance fees go to the winner, and a fee is taken by another address decided by the protocol owner.
 
 # Disclaimer
 
@@ -83,14 +84,18 @@ We use the [CodeHawks](https://docs.codehawks.com/hawks-auditors/how-to-evaluate
 
 Commit Hash:
 ```
+22bbbb2c47f3f2b78c1b134590baf41383fd354f
 ```
 
 ## Scope 
 
 ./src/
-PuppyRaffle.sol
+-- PuppyRaffle.sol
 
 ## Roles
+- Owner: The only one who can change the feeAddress, denominated by the _owner variable.
+- Fee User: The user who takes a cut of raffle entrance fees. Denominated by the feeAddress variable.
+- Raffle Entrant: Anyone who enters the raffle. Denominated by being in the players array.
 
 
 # Executive Summary
@@ -137,7 +142,7 @@ A player who has entered the raffle could have a `fallback`/`receive` function t
 
 **Proof of Concept:**
 
-1. User enters the raffle.
+1. Users enters the raffle.
 2. Attacker sets up a contract with a `fallback` function that calls `PuppyRaffle::refund`.
 3. Attacker enters the raffle.
 4. Attacker calls `PuppyRaffle::refund` from their attack contract, draining the contract balance.
@@ -247,7 +252,7 @@ And this contract as well
 - Also, Reentrancy Guard from [Openzeppelin](https://docs.openzeppelin.com/contracts/4.x/api/security#ReentrancyGuard) can be used.
 
 
-### [H-2] Weak randomness in `PuppyRaffle::selectWinner` allows users to influence or predict the winner and influence or predict the winner puppy.
+### [H-2] Weak randomness in `PuppyRaffle::selectWinner` allows anyone to choose winner.
 
 **Description:** Hashing `msg.sender`, `block.timestamp`, and `block.difficulty` together creates a predictable final number. A predictable random number is not a good random number. Malicious users can manipulate these values or know them ahead of time to choose the winner of the raffle themselves.
 
@@ -257,9 +262,10 @@ And this contract as well
 
 **Proof of Concept:**
 
+There are few attack vectors here.
+
 1. Validators can know ahead of time the `block.timestamp` and 	`block.difficulty` and use that to predict when/how to participate. See the [solidity blog on prevrandao](https://soliditydeveloper.com/prevrandao). `block.difficulty` was recently replaced with prevrandao.
 2. User can mine/manipulate their `msg.sender` value to result in their address being used to generate the winner!
-3. Users can revert their `selectWinner` transaction if they don't like the winner of the resulting puppy.
    
 Using on-chain values as a randomness seed is a [well-known attack vector](https://betterprogramming.pub/how-to-generate-truly-random-numbers-in-solidity-and-blockchain-9ced6472dbdf) in the blockchain space.
 
@@ -281,9 +287,6 @@ Using on-chain values as a randomness seed is a [well-known attack vector](https
 
 **Proof of Concept:**
 
-<details>
-<summary>Code</summary>
-
 1. We conclude a raffle of 4 players
 2. We then have 89 players enter a new raffle, and conclude the raffle.
 3. `totalFees` will be:
@@ -300,6 +303,9 @@ require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are cur
 ```
 
 Although you could use `selfDestruct` to send ETH to this contract in order for the values to match and withdraw the fees, this is clearly not the intended design of the protocol. At some point, there will be too much `balance` in the contract that the above `require` will be impossible to hit.
+
+<details>
+<summary>Code</summary>
 
 ```js
     function test_TotalFeesOverflow() public playersEntered {
@@ -343,15 +349,32 @@ Although you could use `selfDestruct` to send ETH to this contract in order for 
 
 **Recommended Mitigation:** There are a few possible mitigations.
 
-1. Use a newer version of solidity, and a `uint256` instead of `uint64` for `PuppyRaffle::totalFees`
-2. You could also use the `safeMath` library of Openzeppelin for version 0.7.6 of solidity, however you could still have a hard time with the `uint64` type if too many fees are collected.
+1. Use a newer version of Solidity that does not allow integer overflows by default.
+```diff
+- pragma solidity ^0.7.6;
++ pragma solidity ^0.8.18;
+```
+Alternatively, if you want to use an older version of Solidity, you can use a library like OpenZeppelin's SafeMath to prevent integer overflows.
+2. Use a uint256 instead of a uint64 for totalFees.
+```diff
+- uint64 public totalFees = 0;
++ uint256 public totalFees = 0;
+```
 3. Remove the balance check from `PuppyRaffle::withdrawFees`
-
 ```diff
 -   require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
 ```
 
-There are more attack vectors with that final, so we recommend removing it regardless.
+We additionally want to bring your attention to another attack vector as a result of this line in a future finding.
+
+### [H-4] Malicious winner can forever halt the raffle
+
+**Description:** Once the winner is chosen, the selectWinner function sends the prize to the the corresponding address with an external call to the winner account.
+
+```js
+(bool success,) = winner.call{value: prizePool}("");
+require(success, "PuppyRaffle: Failed to send prize pool to winner");
+```
 
 ## Medium
 
