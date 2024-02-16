@@ -286,6 +286,43 @@ contract PuppyRaffleTest is Test {
         assertEq(raffleBalanceAfterAttack, 0);
     }
 
+    function test_TotalFeesOverflow() public playersEntered {
+        // we finish a raffle of 4 to collect some fees
+
+        // simulate raffle duration is over
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        puppyRaffle.selectWinner();
+        uint256 startingTotalFees = puppyRaffle.totalFees();
+        // startingTotalFees = 20% of entranceFee
+        // 4 players has entered 4 * 1e18 = 4e18
+        // 20% of 4e18 = 0.8e18
+
+        uint256 playersNum = 89;
+        address[] memory players = new address[](playersNum);
+        for (uint160 i = 0; i < playersNum; i++) {
+            players[i] = address(i);
+        }
+
+        puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
+
+        // simulate raffle duration is over
+        vm.warp(block.timestamp + duration + 1);
+        vm.roll(block.number + 1);
+
+        puppyRaffle.selectWinner();
+        uint256 endingTotalFees = puppyRaffle.totalFees();
+        console.log("ending Total Fees", endingTotalFees);
+        assertLt(endingTotalFees, startingTotalFees);
+
+        // we are also unable to withdraw any fees because of the require check
+        vm.startPrank(puppyRaffle.feeAddress());
+        vm.expectRevert("PuppyRaffle: There are currently players active!");
+        puppyRaffle.withdrawFees();
+        vm.stopPrank();
+    }
+
     function test_Overflow() public {
         uint256 playersNum = 100;
         address[] memory players = new address[](playersNum);
@@ -296,10 +333,10 @@ contract PuppyRaffleTest is Test {
         puppyRaffle.enterRaffle{value: entranceFee * playersNum}(players);
 
         // simulate raffle duration is over
-        vm.warp(4 days);
+        vm.warp(block.timestamp + duration + 1);
         vm.roll(block.number + 1);
 
-        // // let's call select winner
+        // let's call select winner
         puppyRaffle.selectWinner();
 
         uint256 actualFee = ((players.length * entranceFee) * 20) / 100;

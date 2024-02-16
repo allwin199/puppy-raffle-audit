@@ -112,7 +112,7 @@ contract PuppyRaffle is ERC721, Ownable {
         payable(msg.sender).sendValue(entranceFee);
 
         players[playerIndex] = address(0);
-        // written
+        // report-written
         // If an event can be manipulated
         // An event is missing
         // An event is wrong
@@ -128,7 +128,7 @@ contract PuppyRaffle is ERC721, Ownable {
                 return i;
             }
         }
-        // written if the player is at index 0, it'll return 0 and a player might think they are not active!
+        // report-written if the player is at index 0, it'll return 0 and a player might think they are not active!
         return 0;
     }
 
@@ -143,10 +143,10 @@ contract PuppyRaffle is ERC721, Ownable {
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
 
-        // written randomness
+        // report-written randomness
         // fixes: Chainlink VRF, Commit Reveal Scheme
 
-        // written people can revert the TX till they win
+        // report-written people can revert the TX till they win
         uint256 winnerIndex =
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
@@ -155,19 +155,19 @@ contract PuppyRaffle is ERC721, Ownable {
         uint256 totalAmountCollected = players.length * entranceFee;
 
         // report-written Magic Numbers
-        // @audit check for arithmetic errors
+        // check for arithmetic errors
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
 
         // e this is the total fees the owner should be able to collect
-        // @audit overflow
+        // report-written overflow
         totalFees = totalFees + uint64(fee);
 
         // e when we mint a new puppy NFT, we use the totalSupply as the tokenId
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
-        // @audit randomness
+        // report-written randomness
 
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
         if (rarity <= COMMON_RARITY) {
@@ -185,7 +185,7 @@ contract PuppyRaffle is ERC721, Ownable {
         // e vanity, dosen't matter much
         previousWinner = winner;
 
-        // @audit the winner wouldn't get the money if their fallback was messed up!
+        // report-written the winner wouldn't get the money if their fallback was messed up!
         (bool success,) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
         _safeMint(winner, tokenId);
@@ -194,7 +194,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
         // @audit is it difficult to withdraw fees if there are players (MEV)
-        // @audit mishandling ETH
+        // report-written mishandling ETH
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
