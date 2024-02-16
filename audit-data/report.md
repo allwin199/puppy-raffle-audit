@@ -104,13 +104,13 @@ Commit Hash:
 
 | Severity | Number of issues found |
 | -------- | ---------------------- |
-| High     | 0                      |
-| Medium   | 0                      |
-| Low      | 0                      |
-| Gas      | 0                      |
-| Info     | 0                      |
+| High     | 4                      |
+| Medium   | 3                      |
+| Low      | 1                      |
+| Gas      | 2                      |
+| Info     | 5                      |
 |          |                        |
-| Total    | 0                      |
+| Total    | 15                     |
 
 
 # Findings
