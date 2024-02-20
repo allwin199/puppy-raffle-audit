@@ -1,34 +1,44 @@
----
-title: Protocol Audit Report
-author: Prince Allwin
-date: February 16, 2024
-header-includes:
-#   - \usepackage{titling}
-#   - \usepackage{graphicx}
----
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    .full-page {
+        width:  100%;
+        height:  100vh; /* This will make the div take up the full viewport height */
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    .full-page img {
+        max-width:  200;
+        max-height:  200;
+        margin-bottom: 5rem;
+    }
+    .full-page div{
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+</style>
+</head>
+<body>
 
-\begin{titlepage}
-    \centering
-    \begin{figure}[h]
-        \centering
-    \end{figure}
-    \vspace*{2cm}
-    {\Huge\bfseries Protocol Audit Report\par}
-    \vspace{1cm}
-    {\Large Version 1.0\par}
-    \vspace{2cm}
-    {\Large\itshape Prince Allwin\par}
-    \vfill
-    {\large \today\par}
-\end{titlepage}
+<div class="full-page">
+    <img src="./logo.svg" alt="Logo">
+    <div>
+    <h1>Puppy Raffle Protocol Audit Report</h1>
+    <h3>Prepared by: Prince Allwin</h3>
+    </div>
+</div>
 
-\maketitle
+</body>
+</html>
 
 <!-- Your report starts here! -->
 
-<!-- Prepared by: [Prince Allwin]()
-Lead Security Researches: 
-- Prince Allwin -->
+
 
 # Table of Contents
 - [Table of Contents](#table-of-contents)
@@ -109,7 +119,6 @@ Commit Hash:
 | Low      | 1                      |
 | Gas      | 2                      |
 | Info     | 5                      |
-|          |                        |
 | Total    | 15                     |
 
 

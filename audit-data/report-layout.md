@@ -74,9 +74,6 @@ Commit Hash:
 
 ## Roles
 
-- Owner: The user who can set the password and read the password.
-- Outsiders: No one else should be able to set or read the password.
-
 # Executive Summary
 
 ## Issues found
