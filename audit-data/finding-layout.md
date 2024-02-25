@@ -8,6 +8,3 @@
 
 **Recommended Mitigation:**
 
-```sh
-pandoc report.md --pdf-engine=pdflatex -o report.pdf
-```
