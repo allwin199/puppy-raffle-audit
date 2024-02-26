@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6;
+pragma solidity ^0.7.6; // q why solidity version ^0.7.6, why not newer versions?
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -20,6 +20,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
     uint256 public immutable entranceFee;
 
+    // @audit-info storage variables can be named as `s_players`
     address[] public players;
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
@@ -78,11 +79,15 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param newPlayers the list of players to enter the raffle
     function enterRaffle(address[] memory newPlayers) public payable {
         require(msg.value == entranceFee * newPlayers.length, "PuppyRaffle: Must send enough to enter raffle");
+
+        // @audit-high denial of service
         for (uint256 i = 0; i < newPlayers.length; i++) {
             players.push(newPlayers[i]);
         }
 
         // Check for duplicates
+        // q why is duplicate checking done after pushing?
+        // can it be done in the above loop?
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
@@ -100,6 +105,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
         payable(msg.sender).sendValue(entranceFee);
 
+        //@audit-high re-entrancy
         players[playerIndex] = address(0);
         emit RaffleRefunded(playerAddress);
     }
@@ -108,6 +114,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @param player the address of a player in the raffle
     /// @return the index of the player in the array, if they are not active, it returns 0
     function getActivePlayerIndex(address player) external view returns (uint256) {
+        // q if it returns 0 for not active player, what will it return for player at index 0?
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == player) {
                 return i;
@@ -125,17 +132,21 @@ contract PuppyRaffle is ERC721, Ownable {
     function selectWinner() external {
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
         require(players.length >= 4, "PuppyRaffle: Need at least 4 players");
+        // @audit-high weak random number generation
         uint256 winnerIndex =
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
         uint256 totalAmountCollected = players.length * entranceFee;
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
+
+        // @audit-high conversion from uint256 to uint64
         totalFees = totalFees + uint64(fee);
 
         uint256 tokenId = totalSupply();
 
         // We use a different RNG calculate from the winnerIndex to determine rarity
+        // @audit-high weak random number generation
         uint256 rarity = uint256(keccak256(abi.encodePacked(msg.sender, block.difficulty))) % 100;
         if (rarity <= COMMON_RARITY) {
             tokenIdToRarity[tokenId] = COMMON_RARITY;
@@ -150,11 +161,14 @@ contract PuppyRaffle is ERC721, Ownable {
         previousWinner = winner;
         (bool success,) = winner.call{value: prizePool}("");
         require(success, "PuppyRaffle: Failed to send prize pool to winner");
+
+        // @audit-info put this function before external call
         _safeMint(winner, tokenId);
     }
 
     /// @notice this function will withdraw the fees to the feeAddress
     function withdrawFees() external {
+        // @audit-high address(this).balance can be easily changed by sending extra eth to this contract
         require(address(this).balance == uint256(totalFees), "PuppyRaffle: There are currently players active!");
         uint256 feesToWithdraw = totalFees;
         totalFees = 0;
