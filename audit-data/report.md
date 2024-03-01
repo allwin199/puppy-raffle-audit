@@ -297,14 +297,33 @@ Using on-chain values as a randomness seed is a [well-known attack vector](https
 **Proof of Concept:**
 
 1. We conclude a raffle of 4 players
-2. We then have 89 players enter a new raffle, and conclude the raffle.
+2. We then have 100 players enter a new raffle, and conclude the raffle.
 3. `totalFees` will be:
 ```js
+uint256 totalFees = 0;
+uint256 fee = (totalAmountCollected * 20) / 100;
 totalFees = totalFees + uint64(fee);
-//aka
-totalFees = 800000000000000000 + 1780000000000000000
-// and this will overflow
-totalFees = 153255926290448384 // this is not the right value
+
+// first 4 players enter the raffle by 1 eth each
+// uint256 fee = (totalAmountCollected * 20) / 100;
+// totalFees = totalFees + uint64(fee);
+// totalFees = 0 + uint64(800000000000000000)
+// totalFees = 800000000000000000;
+
+// Next 89 players enter the raffle
+// totalAmountCollected = 100*1e18 = 100e18
+// uint256 fee = (totalAmountCollected * 20) / 100;
+// uint256 fee = 20000000000000000000
+// totalFees = totalFees + uint64(fee);
+// totalFees = 800000000000000000 + uint64(20000000000000000000)
+// totalFees = 800000000000000000 + 1553255926290448384
+// uint64(20000000000000000000) typecasting from uint256 to uint64 results in a overflow
+// we got 1553255926290448384
+// which is not the right answer
+// the reason we got this number is
+// 20000000000000000000 - 18446744073709551615 = 1.553255926290448e18
+// since it overflowed, it subtracted the given number with type(uint64).max
+// If we add, we will get a very low value in fees
 ```
 4. You will be not able to withdraw, due to the line in `PuppyRaffle::withdrawFees`:
 ```js
@@ -406,9 +425,9 @@ An attacker might make the `PuppyRaffle::entrants` array so big, that no else en
 
 **Proof of Concept:**
 
-If we have 2 set of 100 players enter, the gas costs will be as such:
-- 1st 100 players: ~6252039 gas 
-- 2nd 100 players: ~18068130 gas
+If we have 2 set of 100 players to enter, the gas costs will be as such:
+- 1st 100 players: ~  6,252,039 gas 
+- 2nd 100 players: ~ 18,068,130 gas
 
 This is more than 3x more expensive for the seconds 100 players.
 
@@ -492,6 +511,8 @@ Place the following test into `PuppyRaffleTest.t.sol`
         require(block.timestamp >= raffleStartTime + raffleDuration, "PuppyRaffle: Raffle not over");
     }
 ```
+
+Alternatively, you could use [Openzeppelin's `EnumerableSet` library](https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/utils/structs/EnumerableSet.sol)
 
 ### [M-2] Unsafe cast of `PuppyRaffle::fee` loses fees
 

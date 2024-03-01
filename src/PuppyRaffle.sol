@@ -85,9 +85,7 @@ contract PuppyRaffle is ERC721, Ownable {
         }
 
         // Check for duplicates
-        // q why is duplicate checking done after pushing?
-        // can it be done in the above loop?
-        // @audit-high denial of service
+        // @report-written denial of service
         for (uint256 i = 0; i < players.length - 1; i++) {
             for (uint256 j = i + 1; j < players.length; j++) {
                 require(players[i] != players[j], "PuppyRaffle: Duplicate player");
@@ -103,9 +101,9 @@ contract PuppyRaffle is ERC721, Ownable {
         require(playerAddress == msg.sender, "PuppyRaffle: Only the player can refund");
         require(playerAddress != address(0), "PuppyRaffle: Player already refunded, or is not active");
 
+        //@audit-high re-entrancy
         payable(msg.sender).sendValue(entranceFee);
 
-        //@audit-high re-entrancy
         players[playerIndex] = address(0);
         emit RaffleRefunded(playerAddress);
     }
@@ -115,6 +113,7 @@ contract PuppyRaffle is ERC721, Ownable {
     /// @return the index of the player in the array, if they are not active, it returns 0
     function getActivePlayerIndex(address player) external view returns (uint256) {
         // q if it returns 0 for not active player, what will it return for player at index 0?
+        // @audit-low if the player is at index 0, it'll return 0 and a player might think they are not active and they will re-enter
         for (uint256 i = 0; i < players.length; i++) {
             if (players[i] == player) {
                 return i;
@@ -137,10 +136,12 @@ contract PuppyRaffle is ERC721, Ownable {
             uint256(keccak256(abi.encodePacked(msg.sender, block.timestamp, block.difficulty))) % players.length;
         address winner = players[winnerIndex];
         uint256 totalAmountCollected = players.length * entranceFee;
+        // @audit-high precision loss
         uint256 prizePool = (totalAmountCollected * 80) / 100;
         uint256 fee = (totalAmountCollected * 20) / 100;
 
         // @audit-high conversion from uint256 to uint64
+        // which will result in a overflow
         totalFees = totalFees + uint64(fee);
 
         uint256 tokenId = totalSupply();
