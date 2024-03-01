@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.6; // q why solidity version ^0.7.6, why not newer versions?
+pragma solidity ^0.7.6; // @report-written for floating-pragma and outdated solc version
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -20,7 +20,7 @@ contract PuppyRaffle is ERC721, Ownable {
 
     uint256 public immutable entranceFee;
 
-    // @audit-info storage variables can be named as `s_players`
+    // @report-written storage variables can be named as `s_players`
     address[] public players;
     uint256 public raffleDuration;
     uint256 public raffleStartTime;
