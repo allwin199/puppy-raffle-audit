@@ -215,6 +215,13 @@ contract PuppyRaffleTest is Test {
     /////////////////////////////////////////////
 
     function test_denialOfService() public {
+        // If 100 players enter the raffle,
+        // for 101th player to enter the raffle, 101th players has to pay huge fees to enter
+        // If the same situation continues
+        // another 100 players entered the raffle, 201th player has to spend large amount in gas
+        // sometimes this surge in gas could exceed block gas limit and making the transaction revert
+        // causing potential denial of service
+
         vm.txGasPrice(1);
 
         // let's enter 100 players
@@ -247,8 +254,11 @@ contract PuppyRaffleTest is Test {
         assertLt(gasUsedFirst, gasUsedSecond);
 
         // Logs:
-        //     Gas Cost for the first 100 players -> 6252039
-        //     Gas Cost for the second 100 players -> 18068130
+        //     Gas Cost for the first 100 players  ->  6,252,039
+        //     Gas Cost for the second 100 players -> 18,068,130
+
+        // The people entered the lottery first for eg: 1-10 players will pay significantly lower gas fess
+        // comparing to the players entering 190-200
     }
 
     function test_Reentrancy() public {
