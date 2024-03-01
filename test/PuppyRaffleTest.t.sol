@@ -261,6 +261,18 @@ contract PuppyRaffleTest is Test {
         // comparing to the players entering 190-200
     }
 
+    function test_CantSendMoneyToRaffle() public {
+        address senderAddy = makeAddr("sender");
+        vm.deal(senderAddy, 1 ether);
+
+        vm.startPrank(senderAddy);
+        vm.expectRevert();
+        (bool success,) = address(puppyRaffle).call{value: 1 ether}("");
+        vm.stopPrank();
+
+        require(success);
+    }
+
     function test_TotalFeesOverflow() public playersEntered {
         // we finish a raffle of 4 to collect some fees
 
