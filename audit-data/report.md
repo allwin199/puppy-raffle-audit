@@ -147,7 +147,7 @@ In the `PuppyRaffle::refund` function, we first make an external call to the `ms
 
 A player who has entered the raffle could have a `fallback`/`receive` function that calls the `PuppyRaffle::refund` function again and claim another refund. They could continue the cycle till the contract balance is drained.
 
-**Impact:** All fees paid by raffle entrants could be stoken by the malicious participant.
+**Impact:** All fees paid by raffle entrants could be stolen by the malicious participant.
 
 **Proof of Concept:**
 
@@ -310,7 +310,7 @@ totalFees = totalFees + uint64(fee);
 // totalFees = 0 + uint64(800000000000000000)
 // totalFees = 800000000000000000;
 
-// Next 89 players enter the raffle
+// Next 100 players enter the raffle
 // totalAmountCollected = 100*1e18 = 100e18
 // uint256 fee = (totalAmountCollected * 20) / 100;
 // uint256 fee = 20000000000000000000
@@ -626,7 +626,7 @@ Also, true winners would not be able to get paid out, and someone else would win
 
 **Recommended Mitigation:** The easiest recommendation would be to revert if the player is not in the array instead of returning 0.
 
-You could also reserve the 0th position for any competition, but a better soultion might be to return an `int256` where the function returns `-1` if the player is not active.
+You could also reserve the 0th position for any competition, but a better solution might be to return an `int256` where the function returns `-1` if the player is not active.
 
 ## Gas
 
